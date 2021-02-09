@@ -154,6 +154,7 @@ static const quality_id qual_LIFT( "LIFT" );
 static const species_id species_ROBOT( "ROBOT" );
 
 static const json_character_flag json_flag_CANNIBAL( "CANNIBAL" );
+static const json_character_flag json_flag_IMMUNE_SPOIL( "IMMUNE_SPOIL" );
 
 static const bionic_id bio_digestion( "bio_digestion" );
 
@@ -846,27 +847,31 @@ item item::in_its_container( int qty ) const
 
 item item::in_container( const itype_id &cont, const int qty, const bool sealed ) const
 {
-    if( !cont.is_null() ) {
-        item ret( cont, birthday() );
-        if( ret.has_pockets() ) {
-            if( count_by_charges() ) {
-                ret.fill_with( *this, qty );
-            } else {
-                ret.put_in( *this, item_pocket::pocket_type::CONTAINER );
-            }
-
-            ret.invlet = invlet;
-            if( sealed ) {
-                ret.seal();
-            }
-            if( !ret.has_item_with( [&cont]( const item & it ) {
-            return it.typeId() == cont;
-            } ) ) {
-                debugmsg( "ERROR: failed to put %s in its container %s", typeId().c_str(), cont.c_str() );
-                return *this;
-            }
-            return ret;
+    if( cont.is_null() ) {
+        return *this;
+    }
+    item container( cont, birthday() );
+    if( container.has_pockets() ) {
+        if( count_by_charges() ) {
+            container.fill_with( *this, qty );
+        } else {
+            container.put_in( *this, item_pocket::pocket_type::CONTAINER );
         }
+        container.invlet = invlet;
+        if( sealed ) {
+            container.seal();
+        }
+        if( !container.has_item_with( [&cont]( const item & it ) {
+        return it.typeId() == cont;
+        } ) ) {
+            debugmsg( "ERROR: failed to put %s in its container %s", typeId().c_str(), cont.c_str() );
+            return *this;
+        }
+        return container;
+    } else if( is_software() && container.is_software_storage() ) {
+        container.put_in( *this, item_pocket::pocket_type::SOFTWARE );
+        container.invlet = invlet;
+        return container;
     }
     return *this;
 }
@@ -1725,6 +1730,8 @@ void item::debug_info( std::vector<iteminfo> &info, const iteminfo_query *parts,
 {
     if( debug && parts->test( iteminfo_parts::BASE_DEBUG ) ) {
         if( g != nullptr ) {
+            info.push_back( iteminfo( "BASE", string_format( "itype_id: %s",
+                                      typeId().str() ) ) );
             if( !old_owner.is_null() ) {
                 info.push_back( iteminfo( "BASE", string_format( _( "Old owner: %s" ),
                                           _( get_old_owner_name() ) ) ) );
@@ -1772,11 +1779,11 @@ void item::debug_info( std::vector<iteminfo> &info, const iteminfo_query *parts,
                                           iteminfo::lower_is_better,
                                           specific_energy ) );
                 info.push_back( iteminfo( "BASE", _( "Spec heat lq: " ), "",
-                                          iteminfo::lower_is_better,
-                                          1000 * get_specific_heat_liquid() ) );
+                                          iteminfo::lower_is_better | iteminfo::is_decimal,
+                                          get_specific_heat_liquid() ) );
                 info.push_back( iteminfo( "BASE", _( "Spec heat sld: " ), "",
-                                          iteminfo::lower_is_better,
-                                          1000 * get_specific_heat_solid() ) );
+                                          iteminfo::lower_is_better | iteminfo::is_decimal,
+                                          get_specific_heat_solid() ) );
                 info.push_back( iteminfo( "BASE", _( "latent heat: " ), "",
                                           iteminfo::lower_is_better,
                                           get_latent_heat() ) );
@@ -2014,7 +2021,7 @@ void item::food_info( const item *food_item, std::vector<iteminfo> &info,
                                           _( "This food has started to <neutral>rot</neutral>, "
                                              "but <info>your bionic digestion can tolerate "
                                              "it</info>." ) ) );
-            } else if( player_character.has_trait( trait_SAPROVORE ) ) {
+            } else if( player_character.has_flag( json_flag_IMMUNE_SPOIL ) ) {
                 info.push_back( iteminfo( "DESCRIPTION",
                                           _( "This food has started to <neutral>rot</neutral>, "
                                              "but <info>you can tolerate it</info>." ) ) );
@@ -5170,15 +5177,47 @@ units::length item::length() const
     if( made_of( phase_id::LIQUID ) || ( is_soft() && is_container_empty() ) ) {
         return 0_mm;
     }
+
     if( is_corpse() ) {
         return units::default_length_from_volume<int>( corpse->volume );
+    }
+
+    if( is_gun() ) {
+        units::length length_adjusted = type->longest_side;
+
+        if( gunmod_find( itype_barrel_small ) ) {
+            int barrel_percentage = type->gun->barrel_volume / ( type->volume / 100 );
+            units::length reduce_by = ( type->longest_side / 100 ) * barrel_percentage;
+            length_adjusted = type->longest_side - reduce_by;
+        }
+
+        std::vector<const item *> mods = gunmods();
+        for( const item *mod : mods ) {
+            itype_id itype_location( "location" );
+            if( mod->type->gunmod ) {
+                if( mod->type->gunmod->location.str() == "muzzle" ) {
+                    length_adjusted += mod->length();
+                }
+
+                if( mod->type->gunmod->location.str() == "underbarrel" ) {
+                    //checks for melee gunmods (like bayonets)
+                    for( const std::pair<const gun_mode_id, gun_modifier_data> &m : mod->type->gunmod->mode_modifier ) {
+                        if( m.first == gun_mode_REACH ) {
+                            length_adjusted += mod->length();
+                            break;
+                        }
+                    }
+                }
+            }
+        }
+
+        return length_adjusted;
     }
 
     units::length max = is_soft() ? 0_mm : type->longest_side;
     for( const item *it : contents.all_items_top( item_pocket::pocket_type::CONTAINER ) ) {
         max = std::max( it->length(), max );
     }
-
     return max;
 }
 
@@ -8028,8 +8067,9 @@ ret_val<bool> item::is_gunmod_compatible( const item &mod ) const
     } else if( mod.typeId() == itype_brass_catcher && has_flag( flag_RELOAD_EJECT ) ) {
         return ret_val<bool>::make_failure( _( "cannot have a brass catcher" ) );
 
-    } else if( mod.type->gunmod->location.name() == "magazine" ||
-               mod.type->gunmod->location.name() == "mechanism" ) {
+    } else if( ( mod.type->gunmod->location.name() == "magazine" ||
+                 mod.type->gunmod->location.name() == "mechanism" ) &&
+               ( ammo_remaining() > 0 || magazine_current() ) ) {
         return ret_val<bool>::make_failure( _( "must be unloaded before installing this mod" ) );
     }
 

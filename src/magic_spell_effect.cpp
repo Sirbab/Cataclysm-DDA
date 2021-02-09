@@ -423,7 +423,10 @@ static std::set<tripoint> spell_effect_area( const spell &sp, const tripoint &ta
         explosion_colors[pt] = sp.damage_type_color();
     }
 
-    explosion_handler::draw_custom_explosion( get_player_character().pos(), explosion_colors );
+    std::string exp_name = "explosion_" + sp.id().str();
+
+    explosion_handler::draw_custom_explosion( get_player_character().pos(), explosion_colors,
+            exp_name );
     return targets;
 }
 
@@ -781,7 +784,7 @@ void spell_effect::directed_push( const spell &sp, Creature &caster, const tripo
 {
     std::set<tripoint> area = spell_effect_area( sp, target, caster );
     // this group of variables is for deferring movement of the avatar
-    int pushed_distance;
+    int pushed_distance = 0;
     tripoint push_to;
     std::vector<tripoint> pushed_vec;
     bool player_pushed = false;

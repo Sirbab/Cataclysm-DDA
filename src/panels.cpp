@@ -996,12 +996,12 @@ static void draw_limb2( avatar &u, const catacurses::window &w )
 static std::pair<translation, nc_color> weariness_description( size_t weariness )
 {
     static const std::array<std::pair<translation, nc_color>, 6> weary_descriptions { {
-            {to_translation( "Fresh" ), c_green},
-            {to_translation( "Light" ), c_yellow },
-            {to_translation( "Moderate" ), c_light_red},
-            {to_translation( "Weary" ), c_light_red },
-            {to_translation( "Very" ), c_red },
-            {to_translation( "Extreme" ), c_red }
+            {to_translation( "weariness description", "Fresh" ), c_green},
+            {to_translation( "weariness description", "Light" ), c_yellow },
+            {to_translation( "weariness description", "Moderate" ), c_light_red},
+            {to_translation( "weariness description", "Weary" ), c_light_red },
+            {to_translation( "weariness description", "Very" ), c_red },
+            {to_translation( "weariness description", "Extreme" ), c_red }
         } };
     // We can have more than level 5, but we don't really care about it
     if( weariness >= weary_descriptions.size() ) {
@@ -1013,12 +1013,12 @@ static std::pair<translation, nc_color> weariness_description( size_t weariness 
 static std::string activity_level_str( float level )
 {
     static const std::array<translation, 6> activity_descriptions { {
-            to_translation( "None" ),
-            to_translation( "Light" ),
-            to_translation( "Moderate" ),
-            to_translation( "Brisk" ),
-            to_translation( "Active" ),
-            to_translation( "Extreme" ),
+            to_translation( "activity description", "None" ),
+            to_translation( "activity description", "Light" ),
+            to_translation( "activity description", "Moderate" ),
+            to_translation( "activity description", "Brisk" ),
+            to_translation( "activity description", "Active" ),
+            to_translation( "activity description", "Extreme" ),
         } };
     // Activity levels are 1, 2, 4, 6, 8, 10
     // So we can easily cut them in half and round down for an index
@@ -2641,9 +2641,10 @@ void panel_manager::show_adm()
 
     catacurses::window w;
 
+    const int popup_height = 24;
     ui_adaptor ui;
     ui.on_screen_resize( [&]( ui_adaptor & ui ) {
-        w = catacurses::newwin( 21, 75,
+        w = catacurses::newwin( popup_height, 75,
                                 point( ( TERMX / 2 ) - 38, ( TERMY / 2 ) - 10 ) );
 
         ui.position_from_window( w );
@@ -2686,8 +2687,9 @@ void panel_manager::show_adm()
             col_offset += column_widths[i];
         }
         mvwprintz( w, point( 1 + ( col_offset ), current_row + 1 ), c_yellow, ">>" );
-        mvwvline( w, point( column_widths[0], 1 ), 0, 19 );
-        mvwvline( w, point( column_widths[0] + column_widths[1], 1 ), 0, 19 );
+        // Draw vertical separators
+        mvwvline( w, point( column_widths[0], 1 ), 0, popup_height - 2 );
+        mvwvline( w, point( column_widths[0] + column_widths[1], 1 ), 0, popup_height - 2 );
 
         col_offset = column_widths[0] + 2;
         int col_width = column_widths[1] - 4;
