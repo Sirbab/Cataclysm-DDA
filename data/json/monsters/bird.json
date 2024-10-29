@@ -100,6 +100,11 @@
     "harvest": "bird_tiny",
     "upgrades": { "age_grow": 14, "into": "mon_chicken" },
     "//": "Grows up into a standard chicken as a fallback",
+    "petfood": {
+      "food": [ "BIRDFOOD" ],
+      "feed": "The %s seems to like you!  It runs around your legs and seems friendly.",
+      "pet": "The %s runs around your leg."
+    },
     "fear_triggers": [ "SOUND", "PLAYER_CLOSE", "FRIEND_ATTACKED", "FRIEND_DIED", "FIRE", "HURT" ],
     "flags": [
       "SEES",
